@@ -65,8 +65,9 @@ class MDX:
     def __init__(self, model_path: str, params: MDXModel, processor=DEFAULT_PROCESSOR):
 
         # Set the device and the provider (CPU or CUDA)
-        self.device = torch.device(f'cuda:{processor}') if processor >= 0 else torch.device('cpu')
-        self.provider = ['CUDAExecutionProvider'] if processor >= 0 else ['CPUExecutionProvider']
+        self.device = torch.device(f'cuda:{processor}') if (processor >= 0 and torch.cuda.is_available()) else torch.device('cpu')
+        print('init MDX, device: ', self.device)
+        self.provider = ['CUDAExecutionProvider'] if (processor >= 0 and torch.cuda.is_available()) else ['CPUExecutionProvider']
 
         self.model = params
 
@@ -236,12 +237,18 @@ class MDX:
 
 
 def run_mdx(model_params, output_dir, model_path, filename, exclude_main=False, exclude_inversion=False, suffix=None, invert_suffix=None, denoise=False, keep_orig=True, m_threads=2):
-    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    # Set the device to GPU if available; otherwise, use CPU
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    
+    # Adjust m_threads based on available VRAM (only for GPU)
+    if device.type == 'cuda':
+        device_properties = torch.cuda.get_device_properties(device)
+        vram_gb = device_properties.total_memory / 1024**3
+        m_threads = 1 if vram_gb < 8 else 2
+    else:
+        m_threads = 1  # Default for CPU
 
-    device_properties = torch.cuda.get_device_properties(device)
-    vram_gb = device_properties.total_memory / 1024**3
-    m_threads = 1 if vram_gb < 8 else 2
-
+    # Load model parameters based on model hash
     model_hash = MDX.get_hash(model_path)
     mp = model_params.get(model_hash)
     model = MDXModel(
@@ -253,25 +260,32 @@ def run_mdx(model_params, output_dir, model_path, filename, exclude_main=False, 
         compensation=mp["compensate"]
     )
 
+    # Initialize MDX session
     mdx_sess = MDX(model_path, model)
+    
+    # Load and normalize the audio file
     wave, sr = librosa.load(filename, mono=False, sr=44100)
-    # normalizing input wave gives better output
     peak = max(np.max(wave), abs(np.min(wave)))
     wave /= peak
+    
+    # Process the wave data
     if denoise:
         wave_processed = -(mdx_sess.process_wave(-wave, m_threads)) + (mdx_sess.process_wave(wave, m_threads))
         wave_processed *= 0.5
     else:
         wave_processed = mdx_sess.process_wave(wave, m_threads)
-    # return to previous peak
+
+    # Restore original peak level
     wave_processed *= peak
     stem_name = model.stem_name if suffix is None else suffix
 
+    # Save main output if not excluded
     main_filepath = None
     if not exclude_main:
         main_filepath = os.path.join(output_dir, f"{os.path.basename(os.path.splitext(filename)[0])}_{stem_name}.wav")
         sf.write(main_filepath, wave_processed.T, sr)
 
+    # Save inverted output if not excluded
     invert_filepath = None
     if not exclude_inversion:
         diff_stem_name = stem_naming.get(stem_name) if invert_suffix is None else invert_suffix
@@ -279,9 +293,12 @@ def run_mdx(model_params, output_dir, model_path, filename, exclude_main=False, 
         invert_filepath = os.path.join(output_dir, f"{os.path.basename(os.path.splitext(filename)[0])}_{stem_name}.wav")
         sf.write(invert_filepath, (-wave_processed.T * model.compensation) + wave.T, sr)
 
+    # Optionally delete original file
     if not keep_orig:
         os.remove(filename)
 
+    # Cleanup to free memory
     del mdx_sess, wave_processed, wave
     gc.collect()
+    
     return main_filepath, invert_filepath
