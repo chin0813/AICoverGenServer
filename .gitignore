@@ -140,6 +140,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+extraction_app_venv/
 
 # Spyder project settings
 .spyderproject

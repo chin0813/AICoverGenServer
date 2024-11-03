@@ -10,9 +10,9 @@ import warnings
 
 import librosa
 import numpy as np
+import torch
 import onnxruntime as ort
 import soundfile as sf
-import torch
 from tqdm import tqdm
 
 warnings.filterwarnings("ignore")

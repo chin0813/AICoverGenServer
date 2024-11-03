@@ -38,10 +38,12 @@ def get_youtube_video_id(url, ignore_playlist=True):
     return None
 
 
-def yt_download(link):
+import yt_dlp
+
+def yt_download(link, artist_name, song_name):
     ydl_opts = {
         'format': 'bestaudio',
-        'outtmpl': '%(title)s',
+        'outtmpl': '/tmp/%(title)s.%(ext)s',
         'nocheckcertificate': True,
         'ignoreerrors': True,
         'no_warnings': True,
@@ -49,10 +51,18 @@ def yt_download(link):
         'extractaudio': True,
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
     }
+    if link:
+        query = link
+    else: 
+        # Search for song
+        query = f'{artist_name} {song_name}'
+        ydl_opts['default_search'] = 'ytsearch1'
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        result = ydl.extract_info(link, download=True)
-        download_path = ydl.prepare_filename(result, outtmpl='%(title)s.mp3')
-
+        result = ydl.extract_info(query, download=True)
+        if 'entries' in result:
+            result = result['entries'][0]
+        download_path = f"/tmp/{result['title']}.mp3"
+    print(f'Downloaded {download_path}')
     return download_path
 
 def search_youtube_videos(artist, song, max_results=10):

@@ -11,6 +11,8 @@ class Settings:
     DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
     MDX_MODEL_DIR = os.getenv("MDX_MODEL_DIR", "app/assets/mdxnet_models")
     RVC_MODELS_DIR = os.getenv("RVC_MODELS_DIR", "app/assets/rvc_models")
+    DEMIX_DIR = os.getenv("DEMIX_DIR", "/tmp/demix")
+    SPEC_DIR = os.getenv("SPEC_DIR", "/tmp/spectrogram")
     OUTPUT_DIR = os.getenv("OUTPUT_DIR", "/tmp/song_output")
 
 def get_logger(name: str = "app"):

@@ -5,6 +5,7 @@ import os
 import json
 import shlex
 import subprocess
+import allin1.analyze
 import librosa
 import numpy as np
 
@@ -12,6 +13,12 @@ import numpy as np
 from app.config import get_logger, Settings
 from app.services.youtube_download.youtube_download import yt_download
 from app.services.preprocess.mdx import run_mdx
+
+import allin1
+
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="natten.functional")
 
 logger = get_logger(__name__)
 
@@ -50,17 +57,24 @@ def convert_to_stereo(audio_path):
     else:
         return audio_path
 
-def preprocess_song(song_input, input_type, song_output_dir):
+def preprocess_song(song_input, input_type, song_output_dir, artist_name=None, song_name=None, extract_chorus=True):
     keep_orig = False
     if input_type == 'yt':
         logger.display_progress('[~] Downloading song...', 0)
-        song_link = song_input.split('&')[0]
-        orig_song_path = yt_download(song_link)
+        song_link = song_input.split('&')[0] if song_input else None
+        orig_song_path = yt_download(song_link, artist_name, song_name)
     elif input_type == 'local':
         orig_song_path = song_input
         keep_orig = True
     else:
         orig_song_path = None
+
+    logger.info(f'orig_song_path: {orig_song_path}')
+    
+    if extract_chorus:
+        chorus_path = os.path.join(song_output_dir, f'{os.path.basename(orig_song_path).replace(".wav", "")}_Chorus.wav')
+        do_extract_chorus(orig_song_path, chorus_path)
+        orig_song_path = chorus_path
 
     orig_song_path = convert_to_stereo(orig_song_path)
 
@@ -74,3 +88,45 @@ def preprocess_song(song_input, input_type, song_output_dir):
     _, main_vocals_dereverb_path = run_mdx(mdx_model_params, song_output_dir, os.path.join(Settings.MDX_MODEL_DIR, 'Reverb_HQ_By_FoxJoy.onnx'), main_vocals_path, invert_suffix='DeReverb', exclude_main=True, denoise=True)
 
     return orig_song_path, vocals_path, instrumentals_path, main_vocals_path, backup_vocals_path, main_vocals_dereverb_path
+
+def do_extract_chorus(audio_path, chorus_path, padding=3, max_duration=30, choose_longest=False):
+    result = allin1.analyze(audio_path, demix_dir=Settings.DEMIX_DIR, spec_dir=Settings.SPEC_DIR)
+    chorus_info = []
+    if result.segments:
+        chorus_info = [s for s in result.segments if s.label == 'chorus']
+    logger.info(f'Chorus segments: {chorus_info}')
+    if not chorus_info:
+        raise Exception("No chorus found in the song")
+
+    # Merge back-to-back chorus segments
+    merged_chorus_segments = []
+    current_segment = chorus_info[0]
+    for segment in chorus_info[1:]:
+        # Calculate the potential new end time with padding
+        potential_end = max(current_segment.end, segment.end) + padding
+        potential_start = max(current_segment.start - padding, 0)
+        potential_duration = potential_end - potential_start
+
+        if segment.start <= (current_segment.end + padding) and potential_duration <= max_duration:
+            current_segment.end = max(current_segment.end, segment.end)
+        else:
+            merged_chorus_segments.append(current_segment)
+            current_segment = segment
+    merged_chorus_segments.append(current_segment)
+
+    if choose_longest:
+        # Find the longest merged chorus segment
+        logger.info(f'Extracting longest chorus from {audio_path} to {chorus_path}')
+        longest_chorus_segment = max(merged_chorus_segments, key=lambda s: s.end - s.start)
+        # Extract the longest chorus segment
+        chorus_start = max(longest_chorus_segment.start - padding, 0)
+        chorus_end = longest_chorus_segment.end + padding
+        chorus_duration = min(chorus_end - chorus_start, max_duration)
+    else:
+        # Extract the first merged chorus segment
+        logger.info(f'Extracting first chorus from {audio_path} to {chorus_path}')
+        chorus_start = max(merged_chorus_segments[0].start - padding, 0)
+        chorus_end = merged_chorus_segments[0].end + padding
+        chorus_duration = min(chorus_end - chorus_start, max_duration)
+    command = shlex.split(f'ffmpeg -y -loglevel error -i "{audio_path}" -ss {chorus_start} -t {chorus_duration} "{chorus_path}"')
+    subprocess.run(command)
