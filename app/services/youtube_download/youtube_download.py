@@ -5,6 +5,7 @@ from contextlib import suppress
 from urllib.parse import urlparse, parse_qs
 
 import yt_dlp
+import os
 
 def get_youtube_video_id(url, ignore_playlist=True):
     """
@@ -39,6 +40,7 @@ def get_youtube_video_id(url, ignore_playlist=True):
 
 
 import yt_dlp
+import re
 
 def yt_download(link, artist_name, song_name):
     ydl_opts = {
@@ -61,9 +63,17 @@ def yt_download(link, artist_name, song_name):
         result = ydl.extract_info(query, download=True)
         if 'entries' in result:
             result = result['entries'][0]
-        download_path = f"/tmp/{result['title']}.mp3"
-    print(f'Downloaded {download_path}')
-    return download_path
+        
+        # Sanitize the title
+        sanitized_title = yt_dlp.utils.sanitize_filename(result['title'])
+        output_path = f'/tmp/{sanitized_title}.mp3'
+        
+        # Rename the downloaded file
+        original_path = f"/tmp/{result['title']}.mp3"
+        if os.path.exists(original_path):
+            os.rename(original_path, output_path)
+        
+    return output_path
 
 def search_youtube_videos(artist, song, max_results=10):
     search_query = f"{artist} {song}"

@@ -89,7 +89,7 @@ def preprocess_song(song_input, input_type, song_output_dir, artist_name=None, s
 
     return orig_song_path, vocals_path, instrumentals_path, main_vocals_path, backup_vocals_path, main_vocals_dereverb_path
 
-def do_extract_chorus(audio_path, chorus_path, padding=3, max_duration=30, choose_longest=False):
+def do_extract_chorus(audio_path, chorus_path, padding=3, max_duration=90, choose_longest=False):
     result = allin1.analyze(audio_path, demix_dir=Settings.DEMIX_DIR, spec_dir=Settings.SPEC_DIR)
     chorus_info = []
     if result.segments:
@@ -113,6 +113,7 @@ def do_extract_chorus(audio_path, chorus_path, padding=3, max_duration=30, choos
             merged_chorus_segments.append(current_segment)
             current_segment = segment
     merged_chorus_segments.append(current_segment)
+    logger.info(f'merged_chorus_segments {merged_chorus_segments}')
 
     if choose_longest:
         # Find the longest merged chorus segment
@@ -128,5 +129,6 @@ def do_extract_chorus(audio_path, chorus_path, padding=3, max_duration=30, choos
         chorus_start = max(merged_chorus_segments[0].start - padding, 0)
         chorus_end = merged_chorus_segments[0].end + padding
         chorus_duration = min(chorus_end - chorus_start, max_duration)
+        logger.info(f'chorus_duration: {chorus_duration}')
     command = shlex.split(f'ffmpeg -y -loglevel error -i "{audio_path}" -ss {chorus_start} -t {chorus_duration} "{chorus_path}"')
     subprocess.run(command)

@@ -25,6 +25,11 @@ async def get_models():
 
 @router.post("/generate-song")
 async def generate_song(request: SongGenerationRequest):
+    """Generate AI voice cover based on requested params. \n
+       To use search function, provide artist_name and song_name. Remove song_input from the payload.\n
+       To directly specify youtube link, use song_input and remove artist_name and song_name from the paylaod.\n
+       Use GET /voice_models API to get the list of available rvc models.
+    """
     logger.info(f'generate_song: {request.model_dump_json()}')
     ai_cover_path = song_cover_pipeline(**request.model_dump())
     filename = os.path.basename(ai_cover_path)
