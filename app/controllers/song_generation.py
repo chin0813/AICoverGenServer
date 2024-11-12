@@ -27,7 +27,7 @@ def song_cover_pipeline(song_input=None, artist_name=None, song_name=None, extra
 
         # Step 1: Get song id and determine song directory
         # if youtube url
-        if song_input is not None:
+        if song_input is not None and song_input != '':
             if urlparse(song_input).scheme == 'https':
                 input_type = 'yt'
                 song_id = get_youtube_video_id(song_input)

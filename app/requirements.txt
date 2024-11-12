@@ -86,4 +86,7 @@ yt-dlp==2023.7.6
  --find-links https://shi-labs.com/natten/wheels
 natten==0.17.3+torch200cu118
 git+https://github.com/CPJKU/madmom  # install the latest madmom directly from GitHub
-allin1 
+allin1
+
+# gradio
+gradio==4.44.1

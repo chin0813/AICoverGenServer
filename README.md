@@ -39,7 +39,15 @@ Follow these steps to set up and run the server:
     ```sh
     pip install -r app/requirements.txt
     ```
-7. Start the server:
+
+7. download models
+    ```sh
+    cd app/assets/
+    python download_models.py
+    cd ../..
+    ```
+    
+8. Start the server:
     ```sh
     uvicorn app.main:app --reload --host 0.0.0.0
     ```
