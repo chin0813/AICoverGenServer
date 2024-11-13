@@ -3,6 +3,11 @@ from app.controllers.song_generation import song_cover_pipeline
 from app.config import get_logger, Settings
 import os
 
+# def song_cover_pipeline(*args, **kwargs):
+#     print("song_cover_pipeline")
+#     print(args, kwargs)
+#     pass
+
 logger = get_logger(__name__)
 
 def get_models():
@@ -14,25 +19,43 @@ def get_models():
         default_model = models[0]
     return {"voice_models": models, "default_model": default_model}
 
+def save_uploaded_file(uploaded_file):
+    print('save_uploaded_file', uploaded_file)
+    upload_dir = "/tmp/upload"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, uploaded_file.name)
+    with open(file_path, "wb") as f:
+        f.write(uploaded_file.read())
+    return file_path
+
+def generate_function(input_type, uploaded_file, *args, **kwargs):
+    new_args = list(args)
+    if input_type == "Upload Audio":
+        new_args[0] = uploaded_file
+    return song_cover_pipeline(*new_args, **kwargs)
+
+
 with gr.Blocks() as demo:
     gr.Markdown("""# AI Song Cover Generator from Youtube Video""")
     with gr.Row():
         with gr.Column():
             gr.Markdown("""## Input Params""")
             with gr.Blocks():
-                input_type = gr.Radio(["Search", "URL"], label="Input Type", value="Search")
+                input_type = gr.Radio(["Search", "URL", "Upload Audio"], label="Input Type", value="Search")
                 song_input = gr.Textbox(label="Youtube URL", visible=False)
                 with gr.Row():
                     artist_name = gr.Textbox(label="Artist Name", visible=True)
                     song_name = gr.Textbox(label="Song Name", visible=True)
-
+                uploaded_file = gr.Audio(label="Upload Audio File", type='filepath', sources='upload', interactive=True, visible=False)
                 def update_visibility(input_type):
                     if input_type == "Search":
-                        return gr.update(visible=False), gr.update(visible=True), gr.update(visible=True)
-                    else:
-                        return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
+                        return gr.update(visible=False), gr.update(visible=True), gr.update(visible=True), gr.update(visible=False)
+                    elif input_type == "URL":
+                        return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False)
+                    elif input_type == "Upload Audio":
+                        return gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)
 
-                input_type.change(fn=update_visibility, inputs=input_type, outputs=[song_input, artist_name, song_name])
+                input_type.change(fn=update_visibility, inputs=input_type, outputs=[song_input, artist_name, song_name, uploaded_file])
                 extract_chorus = gr.Checkbox(label="Extract Chorus", value=True)
                 voice_model = gr.Dropdown(label="Voice Model", choices=get_models()["voice_models"], value=get_models()["default_model"])
                 pitch_change = gr.Slider(label="Main Vocal Pitch Change (Octave)", value=0, step=1, minimum=-2, maximum=2)
@@ -60,9 +83,13 @@ with gr.Blocks() as demo:
             with gr.Row():
                 output_format = gr.Dropdown(label="Output Format", choices=["mp3", "wav"], value="mp3")
                 generate_button = gr.Button("Generate Song Cover")
+            update_progress = gr.Progress(track_tqdm=True)
             output = gr.Audio(None, type="filepath")
 
-    generate_button.click(fn=song_cover_pipeline, inputs=[song_input, artist_name, song_name, extract_chorus, voice_model, pitch_change, keep_files, 
+    def display_progress(message="", progress=0):
+        update_progress(progress, desc=message)
+    logger.display_progress = display_progress
+    generate_button.click(fn=generate_function, inputs=[input_type, uploaded_file, uploaded_file if input_type=="Upload Audio" else song_input, artist_name, song_name, extract_chorus, voice_model, pitch_change, keep_files, 
                                                       main_gain, backup_gain, inst_gain, index_rate, filter_radius, rms_mix_rate, f0_method, 
                                                       crepe_hop_length, protect, pitch_change_all, reverb_rm_size, reverb_wet, reverb_dry, 
                                                       reverb_damping, output_format], outputs=output)

@@ -19,7 +19,7 @@ Follow these steps to set up and run the server:
     ```
 2. Install FFmpeg:
     ```sh
-    sudo apt install ffmpeg
+    sudo apt install -y ffmpeg
     ```
 3. Install SoX:
     ```sh
